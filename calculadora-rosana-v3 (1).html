@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rosana Bolos & Doces – Custos e Preços</title>
+<style>
+:root{--bg:#fff8f3;--card:#fff;--text:#2b2220;--muted:#7a6a64;--accent:#c2557a;--line:#ead9d0;--ok:#2e7d4f;--bad:#c0392b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1716;--card:#2a2120;--text:#f3e8e4;--muted:#b9a79f;--accent:#e58aa9;--line:#433735;--ok:#6fcf97;--bad:#ff8a7a}}
+:root[data-theme="dark"]{--bg:#1d1716;--card:#2a2120;--text:#f3e8e4;--muted:#b9a79f;--accent:#e58aa9;--line:#433735;--ok:#6fcf97;--bad:#ff8a7a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.4}
+main{max-width:760px;margin:0 auto;padding:14px}
+h1{font-size:1.25rem;margin:0 0 10px}
+h2{font-size:1rem;margin:0 0 10px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--text)}
+.tabs button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:2px}
+input,select,textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font-size:1rem;font-family:inherit}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:480px}
+th{font-size:.75rem;color:var(--muted);text-align:left;font-weight:500;padding:0 4px 4px}
+td{padding:3px 4px}
+.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+button{border:0;border-radius:8px;padding:8px 12px;font-size:.9rem;cursor:pointer;background:var(--line);color:var(--text)}
+button.pri{background:var(--accent);color:#fff}
+button.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+button.x{background:transparent;color:var(--muted);padding:4px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.sub,.hint{color:var(--muted);font-size:.82rem}
+.hint{margin-top:6px}
+.res{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.res:last-child{border:0}
+.big{font-size:1.25rem;font-weight:700}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.warn{color:var(--bad);font-size:.85rem;margin-top:6px}
+.status{font-size:.8rem;color:var(--muted);margin:-6px 0 10px}
+.caixas{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px}
+.cx{border-radius:10px;padding:10px;border:1px solid var(--line)}
+.cx b.v{display:block;font-size:1.2rem}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:8px 0;background:var(--line)}
+.c1{background:#e0a458}.c2{background:#5aa9a3}.c3{background:#c2557a}.c4{background:#999}
+</style>
+</head>
+<body>
+<main>
+  <h1>🍰 Rosana Bolos & Doces</h1>
+  <div class="status" id="status"></div>
+  <div id="app"></div>
+</main>
+
+<script>
+// ============ 1. ESTADO (os dados) ============
+let S = { ingredientes: [], receitas: [], valorHora: 0 };   // os DADOS (vão para o navegador e para a planilha)
+let cfg = { url: "", token: "", rev: 0, dirty: false };       // config da planilha (fica só neste aparelho)
+let ui = { aba: "receitas", atual: null, confirm: null, aviso: "", conflito: false }; // só da tela
+
+// ============ 2. FUNÇÕES AUXILIARES ============
+const $ = id => document.getElementById(id);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : 0; };
+const brl = n => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const brl4 = n => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const pct = n => (n * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ing = id => S.ingredientes.find(i => i.id === id);
+const rec = id => S.receitas.find(r => r.id === id);
+const set = (id, txt) => { const e = $(id); if (e) e.textContent = txt; };
+
+// ============ 3. CÁLCULOS (puros: não mexem na tela) ============
+const custoUn = g => g.qtdEmb ? g.preco / g.qtdEmb : 0;                    // R$ por g/ml/un
+// "ref" de um item é "i:ID" (ingrediente) ou "r:ID" (sub-receita)
+function resolver(ref) {
+  if (!ref) return null;
+  const id = ref.slice(2), o = ref[0] === "i" ? ing(id) : rec(id);
+  return o ? { tipo: ref[0], obj: o } : null;
+}
+// a receita r usa (direta ou indiretamente) a receita alvoId? Serve para impedir ciclos (A usa B e B usa A)
+function dependeDe(r, alvoId, vistos = []) {
+  if (vistos.includes(r.id)) return false;
+  vistos.push(r.id);
+  return r.itens.some(it => {
+    if (!it.ref || it.ref[0] !== "r") return false;
+    const id = it.ref.slice(2);
+    if (id === alvoId) return true;
+    const s = rec(id); return s ? dependeDe(s, alvoId, vistos) : false;
+  });
+}
+// custos do LOTE separados em material / mão de obra / extras, e por UNIDADE do rendimento
+function comp(r, pilha = []) {
+  if (pilha.includes(r.id)) return { ingr: 0, perdas: 0, mao: 0, ext: 0, lote: 0, matUn: 0, maoUn: 0, extUn: 0, unit: 0 };
+  let mat = 0, mao = 0, ext = 0;
+  r.itens.forEach(it => {
+    const x = resolver(it.ref); if (!x) return;
+    if (x.tipo === "i") mat += custoUn(x.obj) * it.qtd;
+    else { const s = comp(x.obj, [...pilha, r.id]); mat += s.matUn * it.qtd; mao += s.maoUn * it.qtd; ext += s.extUn * it.qtd; }
+  });
+  const perdas = mat * r.perda / 100;
+  mao += r.minutos / 60 * S.valorHora;
+  ext += r.extras;
+  const lote = mat + perdas + mao + ext, n = r.rendimento || 0;
+  const matUn = n ? (mat + perdas) / n + r.embalagem : 0, maoUn = n ? mao / n : 0, extUn = n ? ext / n : 0;
+  return { ingr: mat, perdas, mao, ext, lote, matUn, maoUn, extUn, unit: matUn + maoUn + extUn };
+}
+function custoItem(it) {
+  const x = resolver(it.ref); if (!x) return 0;
+  return x.tipo === "i" ? custoUn(x.obj) * it.qtd : comp(x.obj).unit * it.qtd;
+}
+function calc(r) {
+  const k = comp(r);
+  const tx = r.taxas / 100, lu = r.lucro / 100;
+  const valido = tx + lu < 1;
+  const sugerido = valido ? k.unit / (1 - tx - lu) : 0;
+  const preco = r.preco > 0 ? r.preco : sugerido;          // preço praticado, se informado
+  const taxasR = preco * tx;
+  const lucroUn = preco - taxasR - k.unit;                  // lucro bruto estimado
+  const margem = preco ? lucroUn / preco : 0;
+  return { ...k, sugerido, preco, taxasR, lucroUn, margem, lucroLote: lucroUn * r.rendimento, valido, praticado: r.preco > 0 };
+}
+
+// ============ 4. SALVAR, CARREGAR E SINCRONIZAR COM A PLANILHA ============
+const CHAVE = "rosana-calc-v3", CHAVE_CFG = "rosana-cfg-v3";
+const dadosValidos = d => d && Array.isArray(d.ingredientes) && Array.isArray(d.receitas);
+function normalizar(d) {   // garante o formato certo (e converte dados da v2)
+  return {
+    valorHora: num(d.valorHora), ingredientes: d.ingredientes,
+    receitas: d.receitas.map(r => ({ unidadeRend: "un", ...r,
+      itens: (r.itens || []).map(it => ({ ref: it.ref !== undefined ? it.ref : (it.ingId ? "i:" + it.ingId : ""), qtd: num(it.qtd) })) }))
+  };
+}
+function salvarLocal() { try { localStorage.setItem(CHAVE, JSON.stringify(S)); } catch (e) {} }
+function salvarCfg() { try { localStorage.setItem(CHAVE_CFG, JSON.stringify(cfg)); } catch (e) {} }
+function carregarLocal() {
+  try { const d = JSON.parse(localStorage.getItem(CHAVE)); if (dadosValidos(d)) S = normalizar(d); } catch (e) {}
+  try { const c = JSON.parse(localStorage.getItem(CHAVE_CFG)); if (c) cfg = { ...cfg, ...c }; } catch (e) {}
+}
+
+let timer = null, enviando = false, pendente = false;
+const status = (t, cls = "") => { const e = $("status"); if (e) { e.textContent = t; e.className = "status " + cls; } };
+
+// Fala com o Apps Script. Sem header Content-Type de propósito: vira "text/plain" e o navegador não faz preflight (CORS).
+async function chamar(corpo) {
+  const r = await fetch(cfg.url, { method: "POST", body: JSON.stringify({ token: cfg.token, ...corpo }) });
+  return r.json();
+}
+// Chamado a cada alteração: guarda local na hora e agenda o envio para a planilha
+function mudou() {
+  salvarLocal(); cfg.dirty = true; salvarCfg();
+  if (cfg.url) { status("Alterações pendentes…"); clearTimeout(timer); timer = setTimeout(() => enviar(false), 1500); }
+  else status("Salvo só neste aparelho (configure a planilha em Ajustes)");
+}
+async function enviar(forcar) {
+  if (!cfg.url) return;
+  if (ui.conflito && !forcar) return;
+  if (enviando) { pendente = true; return; }
+  enviando = true; status("Salvando na planilha…");
+  try {
+    const r = await chamar({ acao: "salvar", baseRev: forcar ? -1 : cfg.rev, dados: S });
+    if (r.ok) { cfg.rev = r.rev; cfg.dirty = pendente; ui.conflito = false; status("☁️ Salvo na planilha"); }
+    else if (r.conflito) { ui.conflito = true; status("⚠️ Conflito com a planilha", "bad"); render(); }
+    else status("⚠️ " + (r.erro || "Erro ao salvar") + " (guardado neste aparelho)", "bad");
+  } catch (e) { status("Sem conexão: guardado só neste aparelho. Tente de novo depois.", "bad"); }
+  enviando = false; salvarCfg();
+  if (pendente) { pendente = false; enviar(false); }
+}
+async function usarNuvem() {   // descarta o local e traz o da planilha
+  try {
+    const r = await chamar({ acao: "carregar" });
+    if (!r.ok || !r.dados) { status("⚠️ " + (r.erro || "Planilha vazia"), "bad"); return; }
+    S = normalizar(r.dados); cfg.rev = r.rev; cfg.dirty = false; ui.conflito = false; ui.atual = null;
+    salvarLocal(); salvarCfg(); render(); status("☁️ Carregado da planilha");
+  } catch (e) { status("Sem conexão com a planilha", "bad"); }
+}
+async function iniciarNuvem() {   // roda ao abrir a página
+  if (!cfg.url) { status("Salvo só neste aparelho (configure a planilha em Ajustes)"); return; }
+  status("Conectando à planilha…");
+  try {
+    const r = await chamar({ acao: "carregar" });
+    if (!r.ok) { status("⚠️ " + (r.erro || "Erro") + " (usando os dados deste aparelho)", "bad"); return; }
+    if (!r.dados) {   // planilha vazia: manda o que já existe aqui
+      if (S.receitas.length || S.ingredientes.length) return enviar(true);
+      cfg.rev = r.rev; salvarCfg(); status("☁️ Planilha conectada (vazia)"); return;
+    }
+    if (cfg.dirty && cfg.rev !== r.rev) { ui.conflito = true; render(); status("⚠️ Conflito com a planilha", "bad"); return; }
+    if (cfg.dirty) return enviar(false);
+    S = normalizar(r.dados); cfg.rev = r.rev; salvarLocal(); salvarCfg(); render(); status("☁️ Carregado da planilha");
+  } catch (e) { status("Sem conexão: usando os dados deste aparelho", "bad"); }
+}
+async function testarNuvem() {
+  try {
+    const r = await chamar({ acao: "ping" });
+    if (!r.ok) { set("nuvem-msg", "⚠️ " + (r.erro || "Erro")); return; }
+    await iniciarNuvem(); set("nuvem-msg", "Conexão OK ✔");
+  } catch (e) { set("nuvem-msg", "⚠️ Não consegui conectar. Confira a URL e se a implantação está como “Qualquer pessoa”."); }
+}
+function banner() {
+  return ui.conflito ? `<div class="card"><div class="warn">⚠️ A planilha tem dados mais novos (outro aparelho salvou). O que fazer?</div>
+    <div class="row"><button class="pri" data-act="sync-nuvem">Usar os dados da planilha</button>
+    <button class="danger" data-act="sync-local">Manter os deste aparelho (sobrescreve a planilha)</button></div></div>` : "";
+}
+
+// ============ 5. TELAS (geram HTML a partir do estado) ============
+function delBtn(tipo, id) {
+  const on = ui.confirm === tipo + id;
+  return `<button class="danger" data-act="del-${tipo}" data-id="${id}">${on ? "Certeza? Clique de novo" : "Excluir"}</button>`;
+}
+
+function render() {
+  const tab = (v, t) => `<button class="${ui.aba === v ? "on" : ""}" data-act="aba" data-v="${v}">${t}</button>`;
+  const tabs = `<div class="tabs">${tab("receitas", "Receitas")}${tab("ingredientes", "Ingredientes")}${tab("ajustes", "Ajustes")}</div>`;
+  const corpo = ui.aba === "receitas" ? (ui.atual && rec(ui.atual) ? vEditor() : vLista())
+              : ui.aba === "ingredientes" ? vIng() : vAjustes();
+  $("app").innerHTML = tabs + banner() + corpo;
+  atualizar();
+}
+
+function vLista() {
+  const cards = S.receitas.map(r => {
+    const c = calc(r);
+    return `<div class="card"><b>${esc(r.nome || "(sem nome)")}</b>
+      <div class="sub">${r.rendimento} un · custo ${brl(c.unit)} · preço ${brl(c.preco)} · margem ${pct(c.margem)}</div>
+      <div class="row"><button class="pri" data-act="abrir" data-id="${r.id}">Abrir</button>
+      <button data-act="dup" data-id="${r.id}">Duplicar</button>${delBtn("rec", r.id)}</div></div>`;
+  }).join("");
+  return `<div class="card"><button class="pri" data-act="nova">+ Nova receita</button>${ui.aviso ? `<div class="warn">${esc(ui.aviso)}</div>` : ""}
+    ${S.ingredientes.length ? "" : `<div class="hint">Dica: cadastre primeiro seus ingredientes na aba “Ingredientes”.</div>`}</div>`
+    + (cards || `<div class="hint">Nenhuma receita ainda.</div>`);
+}
+
+function vEditor() {
+  const r = rec(ui.atual);
+  const outras = S.receitas.filter(s => s.id !== r.id && !dependeDe(s, r.id));   // sem ciclos
+  const op = (v, sel, nome) => `<option value="${v}" ${v === sel ? "selected" : ""}>${esc(nome || "(sem nome)")}</option>`;
+  const opts = sel => `<option value="">— escolha —</option>` +
+    `<optgroup label="Ingredientes">${S.ingredientes.map(g => op("i:" + g.id, sel, g.nome)).join("")}</optgroup>` +
+    (outras.length ? `<optgroup label="Sub-receitas">${outras.map(s => op("r:" + s.id, sel, s.nome)).join("")}</optgroup>` : "");
+  const itens = r.itens.map((it, i) => `<tr>
+    <td><select data-i="${i}" data-k="ref">${opts(it.ref)}</select></td>
+    <td><input type="number" min="0" step="any" data-i="${i}" data-k="qtd" value="${it.qtd || ""}"></td>
+    <td id="u${i}"></td><td class="r" id="ci${i}"></td>
+    <td><button class="x" data-act="del-item" data-i="${i}">✕</button></td></tr>`).join("");
+  const f = (lbl, k, step) => `<div><label>${lbl}</label><input type="number" min="0" step="${step}" data-f="${k}" value="${r[k] || ""}"></div>`;
+  return `
+  ${ui.aviso ? `<div class="warn">${esc(ui.aviso)}</div>` : ""}
+  <div class="row" style="margin:0 0 10px"><button data-act="voltar">← Voltar</button>
+    <button data-act="dup" data-id="${r.id}">Duplicar</button>${delBtn("rec", r.id)}</div>
+  <div class="card"><h2>Produto</h2><div class="grid">
+    <div><label>Nome</label><input data-f="nome" value="${esc(r.nome)}"></div>
+    ${f("Rendimento (quanto a receita produz)", "rendimento", "any")}
+    <div><label>Unidade do rendimento</label><select data-f="unidadeRend">${["un", "g", "ml"].map(u => `<option ${u === r.unidadeRend ? "selected" : ""}>${u}</option>`).join("")}</select></div></div>
+    <div class="hint">Para usar esta receita dentro de outra (ex.: brigadeiro), o rendimento define o custo por g/ml/un.</div></div>
+  <div class="card"><h2>Ingredientes e sub-receitas</h2>
+    <div class="scroll"><table><thead><tr><th>Ingrediente</th><th>Qtd. usada</th><th>Un.</th><th class="r">Custo</th><th></th></tr></thead>
+    <tbody>${itens}</tbody></table></div>
+    <button class="pri" data-act="add-item" style="margin-top:8px">+ Item</button>
+    ${S.ingredientes.length ? "" : `<div class="warn">Nenhum ingrediente cadastrado. Vá na aba “Ingredientes”.</div>`}</div>
+  <div class="card"><h2>Custos adicionais</h2><div class="grid">
+    ${f("Tempo de preparo (minutos)", "minutos", "1")}${f("Perdas e desperdício (% dos ingredientes)", "perda", "0.5")}
+    ${f("Embalagem por unidade (R$)", "embalagem", "0.01")}${f("Gás/energia/outros no lote (R$)", "extras", "0.01")}</div>
+    <div class="hint">Mão de obra = minutos ÷ 60 × valor da hora (definido em “Ajustes”).</div></div>
+  <div class="card"><h2>Preço</h2><div class="grid">
+    ${f("Taxas (% do preço, ex.: maquininha)", "taxas", "0.1")}${f("Margem de lucro desejada (%)", "lucro", "1")}
+    ${f("Preço que você pratica hoje (R$, opcional)", "preco", "0.01")}</div></div>
+  <div class="card"><h2>Resultado <span class="sub">(estimado)</span></h2>
+    <div class="res"><span>Ingredientes e sub-receitas</span><b id="o-ingr"></b></div>
+    <div class="res"><span>Perdas</span><b id="o-perdas"></b></div>
+    <div class="res"><span>Mão de obra</span><b id="o-mao"></b></div>
+    <div class="res"><span>Gás/energia/outros</span><b id="o-ext"></b></div>
+    <div class="res"><span>Custo do lote (sem embalagem)</span><b id="o-lote"></b></div>
+    <div class="res"><span>Custo por unidade (com embalagem)</span><b id="o-unit"></b></div>
+    <div class="res"><span>Preço sugerido p/ margem desejada</span><b id="o-sug"></b></div>
+    <div class="res"><span id="o-lbl-preco">Preço de venda</span><span class="big" id="o-preco"></span></div>
+    <div class="res"><span>Taxas por unidade</span><b id="o-taxas"></b></div>
+    <div class="res"><span>Lucro bruto estimado por unidade</span><b id="o-lucro"></b></div>
+    <div class="res"><span>Margem de lucro real</span><span class="big" id="o-margem"></span></div>
+    <div class="res"><span>Lucro bruto estimado do lote</span><b id="o-lotelucro"></b></div>
+    <div class="warn" id="aviso"></div>
+    <div class="hint">Lucro bruto = preço − taxas − todos os custos (inclui gás/energia do lote). Não desconta aluguel, internet, etc.</div></div>
+  <div class="card"><h2>💰 Para onde vai o dinheiro da venda?</h2>
+    <div class="sub">Cada unidade vendida por <b id="cx-preco"></b> se divide assim:</div>
+    <div class="bar" id="cx-bar"></div>
+    <div class="caixas">
+      <div class="cx"><div>🛒 <b>Caixinha de Reposição</b></div><b class="v" id="cx1"></b><div class="sub" id="cx1p"></div>
+        <div class="sub">Ingredientes + embalagem + perdas. Dinheiro para comprar material.</div></div>
+      <div class="cx"><div>👩‍🍳 <b>Caixinha do Salário da Mãe</b></div><b class="v" id="cx2"></b><div class="sub" id="cx2p"></div>
+        <div class="sub">Mão de obra.</div></div>
+      <div class="cx"><div>🏠 <b>Caixinha da Empresa</b></div><b class="v" id="cx3"></b><div class="sub" id="cx3p"></div>
+        <div class="sub">Lucro do negócio. Fica na empresa: conta de luz, gás, cozinha nova, imprevistos.</div></div>
+    </div>
+    <div class="res" style="margin-top:8px"><span>Taxas (maquininha etc.), descontadas antes</span><b id="cx4"></b></div></div>`;
+}
+
+function vIng() {
+  const cartoes = S.ingredientes.map((g, i) => `<div class="card">
+    <label>Nome</label>
+    <input data-g="${i}" data-k="nome" value="${esc(g.nome)}" placeholder="Ex.: leite condensado">
+    <div class="grid" style="margin-top:10px">
+      <div><label>Preço pago (R$)</label><input type="number" min="0" step="0.01" inputmode="decimal" data-g="${i}" data-k="preco" value="${g.preco || ""}"></div>
+      <div><label>Qtd. da embalagem</label><input type="number" min="0" step="any" inputmode="decimal" data-g="${i}" data-k="qtdEmb" value="${g.qtdEmb || ""}"></div>
+      <div><label>Unidade</label><select data-g="${i}" data-k="unidade">${["g", "ml", "un"].map(u => `<option ${u === g.unidade ? "selected" : ""}>${u}</option>`).join("")}</select></div>
+      <div><label>Custo por unidade</label><b id="pu${i}"></b></div>
+    </div>
+    <div class="row">${delBtn("ing", g.id)}</div></div>`).join("");
+  return `<div class="card"><h2>Ingredientes</h2>
+    ${ui.aviso ? `<div class="warn">${esc(ui.aviso)}</div>` : ""}
+    <div class="hint" style="margin-top:0">Ex.: leite condensado · R$ 6,50 · 395 · g. Mudou o preço? Altere aqui e todas as receitas se atualizam.</div></div>
+    ${cartoes || `<div class="hint">Nenhum ingrediente ainda.</div>`}
+    <div class="card"><button class="pri" data-act="add-ing">+ Ingrediente</button></div>`;
+}
+
+function vAjustes() {
+  return `<div class="card"><h2>Valor da hora de trabalho</h2>
+    <label>R$ por hora</label><input type="number" min="0" step="0.01" data-cfg="1" value="${S.valorHora || ""}">
+    <div class="hint">Usado para calcular a mão de obra de todas as receitas.</div></div>
+  ${vNuvem()}<div class="card"><h2>Backup</h2>
+    <div class="hint" style="margin:0 0 8px">Os dados ficam só neste navegador. Se limpar os dados do navegador, eles somem. Gere o backup e guarde o texto (ex.: WhatsApp ou Notas).</div>
+    <textarea id="bk" rows="5" placeholder="O backup aparece aqui. Para restaurar, cole o texto aqui."></textarea>
+    <div class="row"><button class="pri" data-act="bk-gerar">Gerar backup</button>
+    <button class="danger" data-act="bk-restaurar">${ui.confirm === "bk" ? "Certeza? Substitui tudo" : "Restaurar"}</button></div>
+    <div class="warn" id="bk-msg"></div></div>`;
+}
+
+function vNuvem() {
+  return `<div class="card"><h2>☁️ Planilha Google (banco de dados)</h2>
+    <label>URL do Apps Script (termina em /exec)</label><input data-cu="1" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
+    <label style="margin-top:8px">Senha (a mesma do TOKEN no script)</label><input data-ct="1" type="password" value="${esc(cfg.token)}">
+    <div class="row"><button class="pri" data-act="nuvem-testar">Testar e conectar</button>
+    <button data-act="nuvem-enviar">Salvar agora</button>
+    <button class="danger" data-act="nuvem-carregar">${ui.confirm === "nuvem" ? "Certeza? Substitui os dados daqui" : "Carregar da planilha"}</button></div>
+    <div class="hint" id="nuvem-msg">Os dados também ficam guardados neste aparelho, como cópia.</div></div>`;
+}
+
+// Divisão do preço nas caixinhas (por unidade vendida)
+function caixas(r, c) {
+  const n = r.rendimento || 0, rpo = c.matUn, sal = c.maoUn, emp = c.extUn + c.lucroUn, p = c.preco;
+  const f = v => p ? pct(v / p) : "–";
+  set("cx-preco", brl(p));
+  set("cx1", brl(rpo)); set("cx1p", f(rpo) + " do preço · no lote: " + brl(rpo * n));
+  set("cx2", brl(sal)); set("cx2p", f(sal) + " do preço · no lote: " + brl(sal * n));
+  set("cx3", brl(emp)); set("cx3p", f(emp) + " do preço · no lote: " + brl(emp * n) + " (lucro " + brl(c.lucroUn) + " + gás/energia " + brl(c.extUn) + " por un.)");
+  set("cx4", brl(c.taxasR));
+  const e3 = $("cx3"); if (e3) e3.className = "v " + (emp >= 0 ? "" : "bad");
+  const seg = (cls, v) => `<div class="${cls}" style="width:${p ? Math.max(0, v / p * 100) : 0}%"></div>`;
+  const bar = $("cx-bar"); if (bar) bar.innerHTML = seg("c1", rpo) + seg("c2", sal) + seg("c3", emp) + seg("c4", c.taxasR);
+}
+
+// Atualiza só os números na tela (sem recriar os campos, para não perder o foco ao digitar)
+function atualizar() {
+  if (ui.aba === "receitas" && ui.atual) {
+    const r = rec(ui.atual); if (!r) return;
+    const c = calc(r);
+    r.itens.forEach((it, i) => { const x = resolver(it.ref); set("u" + i, x ? (x.tipo === "i" ? x.obj.unidade : x.obj.unidadeRend) : ""); set("ci" + i, brl(custoItem(it))); });
+    set("o-ingr", brl(c.ingr)); set("o-perdas", brl(c.perdas)); set("o-mao", brl(c.mao)); set("o-ext", brl(c.ext)); caixas(r, c);
+    set("o-lote", brl(c.lote)); set("o-unit", brl(c.unit)); set("o-sug", c.valido ? brl(c.sugerido) : "–");
+    set("o-lbl-preco", c.praticado ? "Preço de venda (o que você pratica)" : "Preço de venda (sugerido)");
+    set("o-preco", brl(c.preco)); set("o-taxas", brl(c.taxasR)); set("o-lucro", brl(c.lucroUn));
+    set("o-margem", pct(c.margem)); set("o-lotelucro", brl(c.lucroLote));
+    const m = $("o-margem"); if (m) m.className = "big " + (c.margem > 0 ? "ok" : "bad");
+    let av = "";
+    if (!c.valido) av = "⚠️ Taxas + margem desejada somam 100% ou mais: não há preço possível.";
+    else if (c.praticado && c.lucroUn <= 0) av = "⚠️ Nesse preço você está tendo prejuízo.";
+    else if (!r.rendimento) av = "⚠️ Informe o rendimento da receita.";
+    set("aviso", av);
+  }
+  if (ui.aba === "ingredientes")
+    S.ingredientes.forEach((g, i) => set("pu" + i, g.qtdEmb ? brl4(custoUn(g)) + "/" + g.unidade : "–"));
+}
+
+// ============ 6. EVENTOS ============
+$("app").addEventListener("input", ev => {
+  const t = ev.target, d = t.dataset;
+  if (d.cu !== undefined) { cfg.url = t.value.trim(); salvarCfg(); return; }
+  if (d.ct !== undefined) { cfg.token = t.value.trim(); salvarCfg(); return; }
+  if (d.f) { const r = rec(ui.atual); r[d.f] = (d.f === "nome" || d.f === "unidadeRend") ? t.value : num(t.value); }
+  else if (d.i !== undefined) { const it = rec(ui.atual).itens[d.i]; it[d.k] = d.k === "ref" ? t.value : num(t.value); }
+  else if (d.g !== undefined) { const g = S.ingredientes[d.g]; g[d.k] = (d.k === "nome" || d.k === "unidade") ? t.value : num(t.value); }
+  else if (d.cfg) S.valorHora = num(t.value);
+  else return;
+  atualizar(); mudou();
+});
+
+$("app").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  const a = b.dataset.act, id = b.dataset.id;
+  const antes = JSON.stringify(S);
+  const eraConfirm = ui.confirm; ui.confirm = null; ui.aviso = "";
+  const ehConfirma = k => eraConfirm === k;
+
+  if (a === "aba") { ui.aba = b.dataset.v; ui.atual = null; }
+  else if (a === "nova") {
+    const r = { id: uid(), nome: "Nova receita", rendimento: 10, unidadeRend: "un", itens: [], minutos: 0, perda: 0, embalagem: 0, extras: 0, taxas: 0, lucro: 30, preco: 0 };
+    S.receitas.unshift(r); ui.atual = r.id;
+  }
+  else if (a === "abrir") ui.atual = id;
+  else if (a === "voltar") ui.atual = null;
+  else if (a === "dup") {
+    const c = JSON.parse(JSON.stringify(rec(id))); c.id = uid(); c.nome += " (cópia)";
+    S.receitas.splice(S.receitas.findIndex(r => r.id === id) + 1, 0, c); ui.atual = c.id;
+  }
+  else if (a === "del-rec") {
+    const usadaEm = S.receitas.filter(x => x.id !== id && x.itens.some(i => i.ref === "r:" + id)).map(x => x.nome || "(sem nome)");
+    if (usadaEm.length) ui.aviso = "Não dá para excluir: esta receita é usada como sub-receita em " + usadaEm.join(", ") + ". Remova-a de lá primeiro.";
+    else if (ehConfirma("rec" + id)) { S.receitas = S.receitas.filter(r => r.id !== id); ui.atual = null; }
+    else ui.confirm = "rec" + id;
+  }
+  else if (a === "add-item") rec(ui.atual).itens.push({ ref: "", qtd: 0 });
+  else if (a === "del-item") rec(ui.atual).itens.splice(b.dataset.i, 1);
+  else if (a === "add-ing") S.ingredientes.push({ id: uid(), nome: "", preco: 0, qtdEmb: 0, unidade: "g" });
+  else if (a === "del-ing") {
+    const usadoEm = S.receitas.filter(r => r.itens.some(i => i.ref === "i:" + id)).map(r => r.nome || "(sem nome)");
+    if (usadoEm.length) ui.aviso = "Não dá para excluir: este ingrediente é usado em " + usadoEm.join(", ") + ". Remova-o das receitas primeiro.";
+    else if (ehConfirma("ing" + id)) S.ingredientes = S.ingredientes.filter(g => g.id !== id);
+    else ui.confirm = "ing" + id;
+  }
+  else if (a === "nuvem-testar") { render(); testarNuvem(); return; }
+  else if (a === "nuvem-enviar") { render(); enviar(false); return; }
+  else if (a === "nuvem-carregar") {
+    if (ehConfirma("nuvem")) { render(); usarNuvem(); return; }
+    ui.confirm = "nuvem";
+  }
+  else if (a === "sync-nuvem") { usarNuvem(); return; }
+  else if (a === "sync-local") { ui.conflito = false; render(); enviar(true); return; }
+  else if (a === "bk-gerar") { render(); $("bk").value = JSON.stringify(S); $("bk").select(); return; }
+  else if (a === "bk-restaurar") {
+    const txt = $("bk").value; let d;
+    try { d = JSON.parse(txt); } catch (e) { d = null; }
+    if (!dadosValidos(d)) { render(); set("bk-msg", "Backup inválido. Cole o texto completo gerado antes."); return; }
+    if (ehConfirma("bk")) { S = normalizar(d); ui.atual = null; mudou(); render(); set("bk-msg", "Backup restaurado ✔"); return; }
+    ui.confirm = "bk"; render(); $("bk").value = txt; return;
+  }
+  if (JSON.stringify(S) !== antes) mudou();
+  render();
+});
+
+// ============ 7. INÍCIO ============
+carregarLocal();
+render();
+iniciarNuvem();
+</script>
+</body>
+</html>
