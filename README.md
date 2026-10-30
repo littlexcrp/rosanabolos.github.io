@@ -1,1 +1,0 @@
-# rosana-bolos-calculadora
