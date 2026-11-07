@@ -168,13 +168,26 @@ function mudou() {
   if (cfg.url) { status("Alterações pendentes…"); clearTimeout(timer); timer = setTimeout(() => enviar(false), 1500); }
   else status("Salvo só neste aparelho (config.js não encontrado ou incompleto)");
 }
+// Monta as tabelas "legíveis" que o Apps Script desenha na planilha (os cálculos continuam só aqui no app)
+function montarRelatorio() {
+  const q = a => a.map(v => typeof v === "number" ? Math.round(v * 10000) / 10000 : v);
+  const usos = {};
+  S.receitas.forEach(r => r.itens.forEach(it => { if (it.ref && it.ref[0] === "i") { const k = it.ref.slice(2); usos[k] = (usos[k] || 0) + 1; } }));
+  const ingredientes = S.ingredientes.map(g => q([g.nome, g.unidade, g.preco, g.qtdEmb, custoUn(g), usos[g.id] || 0]));
+  const receitas = S.receitas.map(r => { const c = calc(r);
+    return q([r.nome, r.rendimento, r.unidadeRend, c.ingr, c.perdas, c.mao, c.ext, c.unit, c.preco, c.taxasR, c.lucroUn, c.margem, c.matUn, c.maoUn, c.extUn + c.lucroUn]); });
+  const itens = [];
+  S.receitas.forEach(r => r.itens.forEach(it => { const x = resolver(it.ref); if (!x) return;
+    itens.push(q([r.nome, x.obj.nome, x.tipo === "i" ? "Ingrediente" : "Sub-receita", it.qtd, x.tipo === "i" ? x.obj.unidade : x.obj.unidadeRend, custoItem(it)])); }));
+  return { ingredientes, receitas, itens };
+}
 async function enviar(forcar) {
   if (!cfg.url) return;
   if (ui.conflito && !forcar) return;
   if (enviando) { pendente = true; return; }
   enviando = true; status("Salvando na planilha…");
   try {
-    const r = await chamar({ acao: "salvar", baseRev: forcar ? -1 : cfg.rev, dados: S });
+    const r = await chamar({ acao: "salvar", baseRev: forcar ? -1 : cfg.rev, dados: S, relatorio: montarRelatorio() });
     if (r.ok) { cfg.rev = r.rev; cfg.dirty = pendente; ui.conflito = false; status("☁️ Salvo na planilha"); }
     else if (r.conflito) { ui.conflito = true; status("⚠️ Conflito com a planilha", "bad"); render(); }
     else status("⚠️ " + (r.erro || "Erro ao salvar") + " (guardado neste aparelho)", "bad");
