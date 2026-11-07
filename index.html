@@ -188,7 +188,10 @@ async function enviar(forcar) {
   enviando = true; status("Salvando na planilha…");
   try {
     const r = await chamar({ acao: "salvar", baseRev: forcar ? -1 : cfg.rev, dados: S, relatorio: montarRelatorio() });
-    if (r.ok) { cfg.rev = r.rev; cfg.dirty = pendente; ui.conflito = false; status("☁️ Salvo na planilha"); }
+    if (r.ok) { cfg.rev = r.rev; cfg.dirty = pendente; ui.conflito = false;
+      if (r.visual === undefined) status("☁️ Salvo, mas o script da planilha está desatualizado: faça uma Nova versão da implantação", "bad");
+      else if (r.visual) status("☁️ Salvo, mas as abas visuais falharam: " + r.visual, "bad");
+      else status("☁️ Salvo na planilha (abas visuais atualizadas)"); }
     else if (r.conflito) { ui.conflito = true; status("⚠️ Conflito com a planilha", "bad"); render(); }
     else status("⚠️ " + (r.erro || "Erro ao salvar") + " (guardado neste aparelho)", "bad");
   } catch (e) { status("Sem conexão: guardado só neste aparelho. Tente de novo depois.", "bad"); }
