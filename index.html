@@ -53,8 +53,16 @@ button.x{background:transparent;color:var(--muted);padding:4px 8px}
   <div id="app"></div>
 </main>
 
+<script>
+// Se algum script quebrar, mostra o erro na tela em vez de deixar a página vazia
+window.addEventListener("error", function (e) {
+  var s = document.getElementById("status");
+  if (s && e.message) { s.className = "status bad"; s.textContent = "Erro: " + e.message + " (" + String(e.filename || "").split("/").pop() + ":" + e.lineno + ")"; }
+});
+</script>
 <script src="config.js"></script>
 <script>
+(function () {   // o app roda isolado: nada que o config.js declare consegue conflitar com ele
 // ============ 1. ESTADO (os dados) ============
 let S = { ingredientes: [], receitas: [], valorHora: 0 };   // os DADOS (vão para o navegador e para a planilha)
 const URL_PADRAO = "";    // cole aqui a URL do Apps Script (a que termina em /exec)
@@ -447,6 +455,7 @@ if (!cfg.url) cfg.url = URL_PADRAO;       // usa o link embutido se este aparelh
 if (!cfg.token) cfg.token = TOKEN_PADRAO;
 render();
 iniciarNuvem();
+})();
 </script>
 </body>
 </html>
