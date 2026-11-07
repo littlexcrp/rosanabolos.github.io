@@ -55,8 +55,13 @@ button.x{background:transparent;color:var(--muted);padding:4px 8px}
 
 <script>
 // ============ 1. ESTADO (os dados) ============
+// COLE AQUI a URL do seu Apps Script (a que termina em /exec), entre as aspas:
+const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzKFqZ7ibIhQx9UhRVZz43MTQz9qfnh0n1Bqcs2LGYuMqCsEzqk8wZQYcQZ7L6RRD1D/exec";
+
 let S = { ingredientes: [], receitas: [], valorHora: 0 };   // os DADOS (vão para o navegador e para a planilha)
-let cfg = { url: "", token: "", rev: 0, dirty: false };       // config da planilha (fica só neste aparelho)
+const URL_PADRAO = "";    // cole aqui a URL do Apps Script (a que termina em /exec)
+const TOKEN_PADRAO = "";  // opcional: se deixar vazio, a senha é digitada uma vez em Ajustes
+let cfg = { url: URL_PADRAO, token: TOKEN_PADRAO, rev: 0, dirty: false };  // config da planilha
 let ui = { aba: "receitas", atual: null, confirm: null, aviso: "", conflito: false }; // só da tela
 
 // ============ 2. FUNÇÕES AUXILIARES ============
@@ -137,6 +142,7 @@ function salvarCfg() { try { localStorage.setItem(CHAVE_CFG, JSON.stringify(cfg)
 function carregarLocal() {
   try { const d = JSON.parse(localStorage.getItem(CHAVE)); if (dadosValidos(d)) S = normalizar(d); } catch (e) {}
   try { const c = JSON.parse(localStorage.getItem(CHAVE_CFG)); if (c) cfg = { ...cfg, ...c }; } catch (e) {}
+  cfg.url = URL_SCRIPT;   // a URL vem sempre do código
 }
 
 let timer = null, enviando = false, pendente = false;
@@ -191,6 +197,7 @@ async function iniciarNuvem() {   // roda ao abrir a página
   } catch (e) { status("Sem conexão: usando os dados deste aparelho", "bad"); }
 }
 async function testarNuvem() {
+  if (!cfg.url) { set("nuvem-msg", "⚠️ Coloque a URL do script na constante URL_SCRIPT do código."); return; }
   try {
     const r = await chamar({ acao: "ping" });
     if (!r.ok) { set("nuvem-msg", "⚠️ " + (r.erro || "Erro")); return; }
@@ -326,8 +333,8 @@ function vAjustes() {
 
 function vNuvem() {
   return `<div class="card"><h2>☁️ Planilha Google (banco de dados)</h2>
-    <label>URL do Apps Script (termina em /exec)</label><input data-cu="1" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
-    <label style="margin-top:8px">Senha (a mesma do TOKEN no script)</label><input data-ct="1" type="password" value="${esc(cfg.token)}">
+    ${URL_SCRIPT ? "" : `<div class="warn">Falta colocar a URL do script no código (constante URL_SCRIPT, no começo do &lt;script&gt;).</div>`}
+    <label>Senha (a mesma do TOKEN no script)</label><input data-ct="1" type="password" value="${esc(cfg.token)}">
     <div class="row"><button class="pri" data-act="nuvem-testar">Testar e conectar</button>
     <button data-act="nuvem-enviar">Salvar agora</button>
     <button class="danger" data-act="nuvem-carregar">${ui.confirm === "nuvem" ? "Certeza? Substitui os dados daqui" : "Carregar da planilha"}</button></div>
@@ -373,7 +380,6 @@ function atualizar() {
 // ============ 6. EVENTOS ============
 $("app").addEventListener("input", ev => {
   const t = ev.target, d = t.dataset;
-  if (d.cu !== undefined) { cfg.url = t.value.trim(); salvarCfg(); return; }
   if (d.ct !== undefined) { cfg.token = t.value.trim(); salvarCfg(); return; }
   if (d.f) { const r = rec(ui.atual); r[d.f] = (d.f === "nome" || d.f === "unidadeRend") ? t.value : num(t.value); }
   else if (d.i !== undefined) { const it = rec(ui.atual).itens[d.i]; it[d.k] = d.k === "ref" ? t.value : num(t.value); }
@@ -438,6 +444,8 @@ $("app").addEventListener("click", ev => {
 
 // ============ 7. INÍCIO ============
 carregarLocal();
+if (!cfg.url) cfg.url = URL_PADRAO;       // usa o link embutido se este aparelho ainda não tem um salvo
+if (!cfg.token) cfg.token = TOKEN_PADRAO;
 render();
 iniciarNuvem();
 </script>
