@@ -53,11 +53,9 @@ button.x{background:transparent;color:var(--muted);padding:4px 8px}
   <div id="app"></div>
 </main>
 
+<script src="config.js"></script>
 <script>
 // ============ 1. ESTADO (os dados) ============
-// COLE AQUI a URL do seu Apps Script (a que termina em /exec), entre as aspas:
-const URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzKFqZ7ibIhQx9UhRVZz43MTQz9qfnh0n1Bqcs2LGYuMqCsEzqk8wZQYcQZ7L6RRD1D/exec";
-
 let S = { ingredientes: [], receitas: [], valorHora: 0 };   // os DADOS (vão para o navegador e para a planilha)
 const URL_PADRAO = "";    // cole aqui a URL do Apps Script (a que termina em /exec)
 const TOKEN_PADRAO = "";  // opcional: se deixar vazio, a senha é digitada uma vez em Ajustes
@@ -138,11 +136,14 @@ function normalizar(d) {   // garante o formato certo (e converte dados da v2)
   };
 }
 function salvarLocal() { try { localStorage.setItem(CHAVE, JSON.stringify(S)); } catch (e) {} }
-function salvarCfg() { try { localStorage.setItem(CHAVE_CFG, JSON.stringify(cfg)); } catch (e) {} }
+function salvarCfg() { try { localStorage.setItem(CHAVE_CFG, JSON.stringify({ rev: cfg.rev, dirty: cfg.dirty })); } catch (e) {} }
 function carregarLocal() {
   try { const d = JSON.parse(localStorage.getItem(CHAVE)); if (dadosValidos(d)) S = normalizar(d); } catch (e) {}
   try { const c = JSON.parse(localStorage.getItem(CHAVE_CFG)); if (c) cfg = { ...cfg, ...c }; } catch (e) {}
-  cfg.url = URL_SCRIPT;   // a URL vem sempre do código
+  // URL e senha vêm do arquivo config.js (mesma pasta do HTML); só ligam a nuvem se os dois existirem
+  const C = typeof CONFIG !== "undefined" ? CONFIG : {};
+  cfg.url = (C.url && C.token) ? String(C.url).trim() : "";
+  cfg.token = (C.url && C.token) ? String(C.token).trim() : "";
 }
 
 let timer = null, enviando = false, pendente = false;
@@ -157,7 +158,7 @@ async function chamar(corpo) {
 function mudou() {
   salvarLocal(); cfg.dirty = true; salvarCfg();
   if (cfg.url) { status("Alterações pendentes…"); clearTimeout(timer); timer = setTimeout(() => enviar(false), 1500); }
-  else status("Salvo só neste aparelho (configure a planilha em Ajustes)");
+  else status("Salvo só neste aparelho (config.js não encontrado ou incompleto)");
 }
 async function enviar(forcar) {
   if (!cfg.url) return;
@@ -182,7 +183,7 @@ async function usarNuvem() {   // descarta o local e traz o da planilha
   } catch (e) { status("Sem conexão com a planilha", "bad"); }
 }
 async function iniciarNuvem() {   // roda ao abrir a página
-  if (!cfg.url) { status("Salvo só neste aparelho (configure a planilha em Ajustes)"); return; }
+  if (!cfg.url) { status("Salvo só neste aparelho (config.js não encontrado ou incompleto)"); return; }
   status("Conectando à planilha…");
   try {
     const r = await chamar({ acao: "carregar" });
@@ -197,7 +198,7 @@ async function iniciarNuvem() {   // roda ao abrir a página
   } catch (e) { status("Sem conexão: usando os dados deste aparelho", "bad"); }
 }
 async function testarNuvem() {
-  if (!cfg.url) { set("nuvem-msg", "⚠️ Coloque a URL do script na constante URL_SCRIPT do código."); return; }
+  if (!cfg.url) { set("nuvem-msg", "⚠️ Crie o config.js (com url e token) na mesma pasta do HTML."); return; }
   try {
     const r = await chamar({ acao: "ping" });
     if (!r.ok) { set("nuvem-msg", "⚠️ " + (r.erro || "Erro")); return; }
@@ -333,8 +334,7 @@ function vAjustes() {
 
 function vNuvem() {
   return `<div class="card"><h2>☁️ Planilha Google (banco de dados)</h2>
-    ${URL_SCRIPT ? "" : `<div class="warn">Falta colocar a URL do script no código (constante URL_SCRIPT, no começo do &lt;script&gt;).</div>`}
-    <label>Senha (a mesma do TOKEN no script)</label><input data-ct="1" type="password" value="${esc(cfg.token)}">
+    ${cfg.url ? `<div class="hint" style="margin:0 0 8px">Conectado pelo arquivo <b>config.js</b>.</div>` : `<div class="warn">Não achei o <b>config.js</b> (ou está incompleto). Ele precisa estar na mesma pasta do HTML, com a url e o token.</div>`}
     <div class="row"><button class="pri" data-act="nuvem-testar">Testar e conectar</button>
     <button data-act="nuvem-enviar">Salvar agora</button>
     <button class="danger" data-act="nuvem-carregar">${ui.confirm === "nuvem" ? "Certeza? Substitui os dados daqui" : "Carregar da planilha"}</button></div>
@@ -380,7 +380,6 @@ function atualizar() {
 // ============ 6. EVENTOS ============
 $("app").addEventListener("input", ev => {
   const t = ev.target, d = t.dataset;
-  if (d.ct !== undefined) { cfg.token = t.value.trim(); salvarCfg(); return; }
   if (d.f) { const r = rec(ui.atual); r[d.f] = (d.f === "nome" || d.f === "unidadeRend") ? t.value : num(t.value); }
   else if (d.i !== undefined) { const it = rec(ui.atual).itens[d.i]; it[d.k] = d.k === "ref" ? t.value : num(t.value); }
   else if (d.g !== undefined) { const g = S.ingredientes[d.g]; g[d.k] = (d.k === "nome" || d.k === "unidade") ? t.value : num(t.value); }
